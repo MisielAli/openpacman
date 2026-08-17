@@ -13,6 +13,18 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
+// Calendario de modos del nivel 1 clasico. La ultima fase (index 7) es
+// chase permanente y no aparece aqui: agotado el calendario no hay mas cambios.
+const MODE_PHASES = [
+  { mode: 'scatter', time: 7 },
+  { mode: 'chase', time: 20 },
+  { mode: 'scatter', time: 7 },
+  { mode: 'chase', time: 20 },
+  { mode: 'scatter', time: 5 },
+  { mode: 'chase', time: 20 },
+  { mode: 'scatter', time: 5 },
+];
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -36,12 +48,21 @@ function createGame() {
       nextDir: null,
       speed: PACMAN_SPEED,
     },
+    modeTimer: 0,
+    modeIndex: 0,
+    mode: 'scatter',
+    elapsed: 0,
     ghosts: GHOST_STARTS.map( ( g ) => ( {
+      id: g.id,
+      name: g.name,
+      color: g.color,
       x: g.x,
       y: g.y,
       dir: 'up',
       speed: GHOST_SPEED,
-      kind: g.kind,
+      corner: { x: g.corner.x, y: g.corner.y },
+      delay: g.delay,
+      status: 'active',
     } ) ),
   };
 }
@@ -175,7 +196,24 @@ function collides( a, b ) {
   return Math.abs( a.x - b.x ) < 0.5 && Math.abs( a.y - b.y ) < 0.5;
 }
 
-function update( game ) {
+// Avanza el calendario scatter/chase con tiempo real e invierte la direccion
+// de los fantasmas activos en cada cambio de modo.
+function updateModes( game, dt ) {
+  game.elapsed += dt;
+  game.modeTimer += dt;
+  const phase = MODE_PHASES[ game.modeIndex ];
+  if ( !phase || game.modeTimer < phase.time ) return;
+  game.modeTimer = 0;
+  game.modeIndex++;
+  const next = MODE_PHASES[ game.modeIndex ];
+  game.mode = next ? next.mode : 'chase';
+  game.ghosts.forEach( ( g ) => {
+    if ( g.status === 'active' ) g.dir = OPPOSITE[ g.dir ];
+  } );
+}
+
+function update( game, dt ) {
+  updateModes( game, dt );
   movePacman( game );
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
