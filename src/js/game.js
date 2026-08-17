@@ -12,6 +12,7 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const FRIGHT_TIME = 6;      // segundos de modo asustado por energizante
 
 // Calendario de modos del nivel 1 clasico. La ultima fase (index 7) es
 // chase permanente y no aparece aqui: agotado el calendario no hay mas cambios.
@@ -33,7 +34,7 @@ function createGame() {
   grid[ PACMAN_START.y ][ PACMAN_START.x ] = 0;
 
   let dots = 0;
-  for ( const row of grid ) for ( const v of row ) if ( v === 2 ) dots++;
+  for ( const row of grid ) for ( const v of row ) if ( v === 2 || v === 4 ) dots++;
 
   return {
     state: 'start',
@@ -52,6 +53,8 @@ function createGame() {
     modeIndex: 0,
     mode: 'scatter',
     elapsed: 0,
+    frightTimer: 0,
+    ghostChain: 0,
     ghosts: GHOST_STARTS.map( ( g ) => ( {
       id: g.id,
       name: g.name,
@@ -63,6 +66,7 @@ function createGame() {
       corner: { x: g.corner.x, y: g.corner.y },
       delay: g.delay,
       status: 'caged',
+      frightened: false,
     } ) ),
   };
 }
@@ -75,12 +79,13 @@ function aligned( v ) {
 //   pacman:  bloqueado por pared (1) y puerta (3)
 //   ghost:   bloqueado por pared (1) y puerta (3) — los activos no reingresan
 //   exiting: bloqueado solo por pared (1); atraviesa la puerta al salir
+//   eyes:    bloqueado solo por pared (1); atraviesa la puerta hacia abajo
 function isWall( grid, x, y, actor ) {
   if ( y < 0 || y >= grid.length ) return true;
   if ( x < 0 || x >= grid[ 0 ].length ) return true;
   const v = grid[ y ][ x ];
   if ( v === 1 ) return true;
-  if ( v === 3 && actor !== 'exiting' ) return true;
+  if ( v === 3 && actor !== 'exiting' && actor !== 'eyes' ) return true;
   return false;
 }
 
@@ -121,6 +126,19 @@ function movePacman( game ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += 10;
       game.dotsRemaining--;
+    }
+    // Comer energizante: activa el modo asustado (re-comer reinicia a 6 s).
+    if ( grid[ p.y ][ p.x ] === 4 ) {
+      grid[ p.y ][ p.x ] = 0;
+      game.score += 50;
+      game.dotsRemaining--;
+      game.frightTimer = FRIGHT_TIME;
+      game.ghostChain = 0;
+      game.ghosts.forEach( ( g ) => {
+        if ( g.status === 'eyes' ) return;
+        g.frightened = true;
+        g.dir = OPPOSITE[ g.dir ];
+      } );
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -174,13 +192,21 @@ const DIR_PRIORITY = [ 'up', 'left', 'down', 'right' ];
 
 function decideGhost( game, g ) {
   const grid = game.grid;
-  const target = ghostTarget( game, g );
+  const isEyes = g.status === 'eyes';
+  const target = isEyes ? PEN_EXIT : ghostTarget( game, g );
+  const actor = isEyes ? 'eyes' : 'ghost';
 
   const options = DIR_PRIORITY.filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, actor )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
+
+  // Asustado: direccion aleatoria entre las legales sin reversa.
+  if ( g.frightened && !isEyes ) {
+    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+    return;
+  }
 
   let best = choices[ 0 ];
   let bestDist = Infinity;
@@ -211,6 +237,19 @@ function stepExiting( g ) {
   else g.dir = 'up';
 }
 
+// Ruta controlada de los ojos: al llegar a la puerta (13,11) bajan por el
+// interior de la jaula hasta (13,14), donde pasan a 'exiting' (salida inmediata).
+const PEN_CENTER = { x: 13, y: 14 };
+
+function stepEyes( g ) {
+  if ( g.x === PEN_CENTER.x && g.y >= PEN_CENTER.y ) {
+    g.status = 'exiting';
+    g.frightened = false;
+    return;
+  }
+  g.dir = 'down';
+}
+
 function moveGhost( game, g ) {
   if ( g.status === 'caged' ) return;
 
@@ -221,8 +260,9 @@ function moveGhost( game, g ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
     if ( g.status === 'exiting' ) stepExiting( g );
+    else if ( g.status === 'eyes' && g.x === PEN_EXIT.x && g.y >= PEN_EXIT.y ) stepEyes( g );
     else decideGhost( game, g );
-    const actor = g.status === 'exiting' ? 'exiting' : 'ghost';
+    const actor = g.status === 'exiting' || g.status === 'eyes' ? g.status : 'ghost';
     if ( !canMove( grid, g.x, g.y, g.dir, actor ) ) return;
   }
 
@@ -243,6 +283,8 @@ function resetPositions( game ) {
   game.modeIndex = 0;
   game.mode = 'scatter';
   game.elapsed = 0;
+  game.frightTimer = 0;
+  game.ghostChain = 0;
 
   game.ghosts.forEach( ( g, i ) => {
     const s = GHOST_STARTS[ i ];
@@ -251,6 +293,7 @@ function resetPositions( game ) {
     g.dir = 'up';
     g.status = 'caged';
     g.delay = s.delay;
+    g.frightened = false;
   } );
 }
 
@@ -259,9 +302,11 @@ function collides( a, b ) {
 }
 
 // Avanza el calendario scatter/chase con tiempo real e invierte la direccion
-// de los fantasmas activos en cada cambio de modo.
+// de los fantasmas activos en cada cambio de modo. Congelado durante el modo
+// asustado; el reloj de liberacion (elapsed) sigue corriendo.
 function updateModes( game, dt ) {
   game.elapsed += dt;
+  if ( game.frightTimer > 0 ) return;
   game.modeTimer += dt;
   const phase = MODE_PHASES[ game.modeIndex ];
   if ( !phase || game.modeTimer < phase.time ) return;
@@ -277,6 +322,17 @@ function updateModes( game, dt ) {
 function update( game, dt ) {
   updateModes( game, dt );
 
+  // Temporizador del modo asustado: al expirar, fantasmas vuelven a la normalidad.
+  if ( game.frightTimer > 0 ) {
+    game.frightTimer -= dt;
+    if ( game.frightTimer <= 0 ) {
+      game.frightTimer = 0;
+      game.ghosts.forEach( ( g ) => {
+        g.frightened = false;
+      } );
+    }
+  }
+
   game.ghosts.forEach( ( g ) => {
     if ( g.status === 'caged' && game.elapsed >= g.delay ) g.status = 'exiting';
   } );
@@ -285,15 +341,22 @@ function update( game, dt ) {
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
   for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
-      game.lives--;
-      if ( game.lives <= 0 ) {
-        game.state = 'lost';
-        return;
-      }
-      resetPositions( game );
-      break;
+    if ( !collides( game.pacman, g ) ) continue;
+    if ( g.status === 'eyes' ) continue; // los ojos no danan ni se recomen
+    if ( g.frightened ) {
+      game.score += 200 * Math.pow( 2, game.ghostChain );
+      game.ghostChain++;
+      g.status = 'eyes';
+      g.frightened = false;
+      continue;
     }
+    game.lives--;
+    if ( game.lives <= 0 ) {
+      game.state = 'lost';
+      return;
+    }
+    resetPositions( game );
+    break;
   }
 
   if ( game.dotsRemaining <= 0 ) game.state = 'won';

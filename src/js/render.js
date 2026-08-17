@@ -5,6 +5,7 @@ const TILE = 20;
 const WALL_COLOR = '#2121ff';
 const DOOR_COLOR = '#ffb8ff';
 const DOT_COLOR = '#ffb897';
+const FRIGHT_COLOR = '#2121de';
 
 function cellCenter( x, y ) {
   return { cx: x * TILE + TILE / 2, cy: y * TILE + TILE / 2 };
@@ -66,12 +67,21 @@ function drawDoor( ctx, grid ) {
   ctx.stroke();
 }
 
-function drawDots( ctx, grid ) {
+function drawDots( ctx, grid, frame ) {
   ctx.fillStyle = DOT_COLOR;
   for ( let y = 0; y < grid.length; y++ ) {
     for ( let x = 0; x < grid[ 0 ].length; x++ ) {
-      if ( grid[ y ][ x ] !== 2 ) continue;
+      const v = grid[ y ][ x ];
+      if ( v !== 2 && v !== 4 ) continue;
       const { cx, cy } = cellCenter( x, y );
+      // Energizante: circulo grande parpadeante (visible cada 15 frames).
+      if ( v === 4 ) {
+        if ( Math.floor( frame / 15 ) % 2 !== 0 ) continue;
+        ctx.beginPath();
+        ctx.arc( cx, cy, 6, 0, Math.PI * 2 );
+        ctx.fill();
+        continue;
+      }
       ctx.beginPath();
       ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
       ctx.fill();
@@ -134,6 +144,24 @@ function drawGhost( ctx, g, color ) {
   }
 }
 
+// Solo los ojos del fantasma (estado 'eyes').
+function drawGhostEyes( ctx, g ) {
+  const { cx, cy } = cellCenter( g.x, g.y );
+  const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
+  const ex = dir.x * 1.6;
+  const ey = dir.y * 1.6;
+  for ( const off of [ -3.5, 3.5 ] ) {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc( cx + off, cy - 1, 3, 0, Math.PI * 2 );
+    ctx.fill();
+    ctx.fillStyle = '#0000bb';
+    ctx.beginPath();
+    ctx.arc( cx + off + ex, cy - 1 + ey, 1.5, 0, Math.PI * 2 );
+    ctx.fill();
+  }
+}
+
 function drawHUD( ctx, game, W ) {
   ctx.fillStyle = '#fff';
   ctx.font = '14px "Courier New", monospace';
@@ -154,9 +182,21 @@ function draw( ctx, game, frame ) {
 
   drawWalls( ctx, grid );
   drawDoor( ctx, grid );
-  drawDots( ctx, grid );
+  drawDots( ctx, grid, frame );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g ) => drawGhost( ctx, g, g.color ) );
+  game.ghosts.forEach( ( g ) => {
+    if ( g.status === 'eyes' ) {
+      drawGhostEyes( ctx, g );
+      return;
+    }
+    let color = g.color;
+    if ( g.frightened ) {
+      color = FRIGHT_COLOR;
+      // Aviso final: parpadeo azul/blanco en los ultimos 2 segundos.
+      if ( game.frightTimer <= 2 && Math.floor( frame ) % 2 === 1 ) color = '#fff';
+    }
+    drawGhost( ctx, g, color );
+  } );
   drawHUD( ctx, game, W );
 }
 

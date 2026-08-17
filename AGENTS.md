@@ -6,7 +6,7 @@
 - Scripts are classic globals and must stay ordered: `maze.js` defines maze globals, `game.js` defines `createGame`/`update`/`DIRS`, `render.js` defines `draw`, and `main.js` wires input and the animation loop.
 - `maze.js` owns the immutable numeric maze template. `createGame()` copies it into `game.grid`; mutate only `game.grid` while playing so restart works.
 - The maze is 28 x 31 tiles and `render.js` uses `TILE = 20`; keep the canvas dimensions (`560 x 620`) and maze dimensions aligned when changing either.
-- Tile values are part of the game contract: `0` walkable empty, `1` wall, `2` dot, `3` ghost-pen door. Pac-Man cannot cross doors; ghosts can.
+- Tile values are part of the game contract: `0` walkable empty, `1` wall, `2` dot, `3` ghost-pen door, `4` energizer. Pac-Man cannot cross doors; ghosts can.
 
 ## Skills
 
