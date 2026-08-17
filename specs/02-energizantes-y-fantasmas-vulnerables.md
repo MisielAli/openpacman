@@ -1,6 +1,6 @@
 # SPEC 02 — Energizantes y fantasmas vulnerables
 
-> **Estado:** Aprovado
+> **Estado:** Implementado
 > **Depende de:** SPEC 01
 > **Fecha:** 2026-08-16
 > **Objetivo:** Incorporar los cuatro energizantes clasicos (uno por esquina) que vuelven vulnerables a los fantasmas durante 6 segundos, permitiendo a Pac-Man comerselos por 200/400/800/1600 puntos mientras regresan como ojos a la jaula.
