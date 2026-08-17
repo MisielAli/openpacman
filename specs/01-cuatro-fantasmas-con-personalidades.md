@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas con personalidades
 
-> **Estado:** Borrador
+> **Estado:** Aprovado
 > **Depende on:** ninguna
 > **Fecha:** 2026-08-15
 > **Objetivo:** Incorporar cuatro fantasmas clásicos (Blinky, Pinky, Inky y Clyde) con identidades propias, liberación escalonada desde la jaula y estrategias diferenciadas de persecución y dispersión.
